@@ -1,6 +1,7 @@
 torch>=2.5.1
 torchvision>=0.20.1
 torchaudio>=2.5.1
+torchmetrics==1.6.1
 numpy>=2.2.0
 pandas>=2.2.0
 matplotlib>=3.10.0
