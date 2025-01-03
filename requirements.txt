@@ -14,3 +14,4 @@ loguru==0.7.3
 mediapy==1.2.2
 datasets>=3.2.0
 huggingface-hub>=0.27.0
+transformers==4.47.1
