@@ -4,18 +4,44 @@ import torch.nn.functional as F
 from math import inf
 import math
 import sys
-sys.path.append('COSMOS')
+sys.path.append('cosmos')
 from cosmos_tokenizer.image_lib import ImageTokenizer
 
+class FSQConverter:
+    def __init__(self):
+        self.levels = torch.tensor([8, 8, 8, 5, 5, 5]).to('cuda')
+        self.dim = len(self.levels)
+        self.basis = torch.cumprod(torch.tensor([1] + [self.levels[i].item() for i in range(len(self.levels)-1)]), dim=0).to('cuda')
+
+    def indices_to_codes(self, indices: torch.Tensor) -> torch.Tensor:
+        """Converts indices to codes using NVIDIA's method, matches original paper implementation"""
+        indices = indices.unsqueeze(-1).float()
+        codes_non_centered = (indices // self.basis) % self.levels
+        
+        # Scale and shift inverse (normalize to [-1, 1])
+        half_width = self.levels // 2
+        codes = (codes_non_centered - half_width) / half_width
+        
+        return codes
+
+    def indices_to_latents(self, indices: torch.Tensor) -> torch.Tensor:
+        """Convert indices to latent values"""
+        return self.indices_to_codes(indices)
 
 class cosmos_vae(nn.Module):
     def __init__(self):
         super().__init__()
-        model_name = "Cosmos-Tokenizer-CI16x16"
+        model_name = "Cosmos-Tokenizer-DI16x16"
         self.encoder = ImageTokenizer(checkpoint_enc=f'pretrained_ckpts/{model_name}/encoder.jit')
         self.decoder=ImageTokenizer(checkpoint_dec=f'pretrained_ckpts/{model_name}/decoder.jit')
         
 
+
+
+
+
+
+    
 #RoPE for transformer
 class RotaryPositionEmbedding(nn.Module):
     def __init__(self, dim: int, max_seq_len: int = 4096):
@@ -145,8 +171,6 @@ class VARModel(nn.Module):
         # Reshape to match your current output format
         mag_logits = mag_logits.view(b, h*w, 1024, c).permute(0,3,2,1)
         phase_logits = phase_logits.view(b, h*w, 1024, c).permute(0,3,2,1) 
-        
-        
         return mag_logits, phase_logits
 
 
