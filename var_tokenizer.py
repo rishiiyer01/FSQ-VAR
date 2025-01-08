@@ -12,14 +12,15 @@ from model import cosmos_vae
 #probably will only need a single epoch
 
 #this should match the original paper exactly: 
+
 class VARTokenizer(nn.Module):
-    def __init__(self, resolutions=[(8,8), (16,16), (32,32)]):
+    def __init__(self, resolutions=[(4,4), (8,8), (16,16)]):
         super().__init__()
         self.resolutions = resolutions
         
         
         self.residual_convs = nn.ModuleList([
-            nn.Conv2d(3, 3, kernel_size=3, padding=1)
+            nn.Conv2d(6,6, kernel_size=3, padding=1) #channels=6 because of discrete cosmos
             for _ in range(len(resolutions))
         ])
     
