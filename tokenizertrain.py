@@ -8,21 +8,16 @@ sys.path.append('cosmos')
 from cosmos_tokenizer.image_lib import ImageTokenizer
 from model import cosmos_vae
 from var_tokenizer import VARTokenizer
-
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 #we can train this on a single epoch of imagenet with a single h100, no fsdp needed
 
 #there are some hardcoded numbers that I will update, be warned
-import torch
-import torchvision
-import torch.optim as optim
-import torch.nn as nn
-import torch.nn.functional as F
 
 from functools import reduce
 import operator
 import numpy as np
-import math
+
 from torch.distributions import Categorical
 
 from torchvision import transforms
@@ -88,7 +83,7 @@ def loss_fn(latents,target_latents,image):
     
     return total_loss,lpips_loss_var,lpips_loss_original
 num_epochs=1
-model = VARtokenizer()
+model = VARTokenizer()
 #model.load_state_dict(torch.load('spectral_model_latent.pth'))
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
@@ -117,7 +112,8 @@ for epoch in range(num_epochs):
             #encoded=encoded.to(torch.float) #this depends on whether you want to train the var tokenizer in bfloat16 or float32, cosmos is native bfloat16
         images=images.to('cuda')
         optimizer.zero_grad()
-        output = model(encoded)
+        output = model.encoder(encoded)
+        output=model.decoder(output)
         total_loss,lpips_loss_var,lpips_loss_original = loss_fn(output, encoded,images) #reconstruction goal
         
         if not torch.isnan(total_loss):
