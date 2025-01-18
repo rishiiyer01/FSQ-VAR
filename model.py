@@ -28,16 +28,50 @@ class FSQConverter:
         """Convert indices to latent values"""
         return self.indices_to_codes(indices)
 
+    def latents_to_indices(self, latents: torch.Tensor) -> torch.Tensor:
+        """Convert latent values back to indices using NVIDIA's method
+        Args:
+            latents: Tensor of shape (..., dim) containing values in [-1, 1]
+        Returns:
+            indices: Tensor containing integer indices
+        """
+        # First denormalize from [-1, 1] back to [0, levels-1]
+        latents=latents.to(torch.float32)
+        half_width = self.levels // 2
+        latents=latents.permute(0,2,3,1)
+        codes = (latents * half_width) + half_width
+        
+        
+        # Calculate indices using the basis (matching their codes_to_indices method)
+        indices = (codes * self.basis).sum(dim=-1).to(torch.int32)
+        
+        return indices
+
 class cosmos_vae(nn.Module):
     def __init__(self):
         super().__init__()
         model_name = "Cosmos-Tokenizer-DI16x16"
         self.encoder = ImageTokenizer(checkpoint_enc=f'pretrained_ckpts/{model_name}/encoder.jit')
         self.decoder=ImageTokenizer(checkpoint_dec=f'pretrained_ckpts/{model_name}/decoder.jit')
+
+
+
+
+
+#process
+#vae encode+quantize
+#var tokenize with fsq
+#transformer: vocab 64000
+#var detokenize
+#token to latent
+#vae decode
+class var_tokenizer(nn.Module):
+    def __init__(self):
+        super().__init__()
         
-
-
-
+    def forward(self):
+        
+        pass
 
 
 
@@ -203,7 +237,9 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-#attention
+
+
+
 class Attention(nn.Module):
     def __init__(self, hidden_dim, num_heads=8):
         super().__init__()
