@@ -7,23 +7,27 @@ import sys
 sys.path.append('cosmos')
 from cosmos_tokenizer.image_lib import ImageTokenizer
 from model import cosmos_vae
+from model import FSQConverter
 
 #phase 1: just need to encode two images, var_tokenize, detokenize, match latents
 #probably will only need a single epoch
 
-#this should match the original paper exactly: 
-
+#this should match the original paper exactly with the exception of resolutions and quantization method
+#original paper used 10 scales, we use 8
 class VARTokenizer(nn.Module):
-    def __init__(self, resolutions=[(4,4), (8,8), (16,16)]):
+    def __init__(self, resolutions=[(1,1),(2,2),(4,4),(6,6) (8,8),(10,10),(12,12),(16,16)]):
         super().__init__()
         self.resolutions = resolutions
         
         
         self.residual_convs = nn.ModuleList([
-            nn.Conv2d(6,6, kernel_size=3, padding=1) #channels=6 because of discrete cosmos
+            nn.Conv2d(6,6, kernel_size=3, padding=1).to(torch.bfloat16) #channels=6 because of discrete cosmos
             for _ in range(len(resolutions))
         ])
-    
+        #self.fsqconverter=FSQConverter() #converts latents to indices or indices to latents by the specified nvidia fsq
+        model_name="Cosmos-Tokenizer-DI16x16"
+        self.quantizer=ImageTokenizer(checkpoint_enc=f'pretrained_ckpts/{model_name}/encoder.jit').to('cuda')._enc_model.quantizer
+        
     def encode(self, latents):
         """
         Args:
@@ -40,7 +44,9 @@ class VARTokenizer(nn.Module):
             f_curr = F.interpolate(f, size=(h, w), mode='bilinear', align_corners=False)
             
             # Quantize
-            r = torch.round(f_curr).clamp(-0.5, 0.5)  # Assuming FSQ range
+            
+            tup=self.quantizer(f_curr.to(torch.float32)) #fsq works best in float32
+            r=tup[1].to(torch.bfloat16)
             tokens.append(r)
             
             
