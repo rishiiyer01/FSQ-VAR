@@ -15,7 +15,7 @@ from model import FSQConverter
 #this should match the original paper exactly with the exception of resolutions and quantization method
 #original paper used 10 scales, we use 8
 class VARTokenizer(nn.Module):
-    def __init__(self, resolutions=[(1,1),(2,2),(4,4),(6,6) (8,8),(10,10),(12,12),(16,16)]):
+    def __init__(self, resolutions=[(1,1),(2,2),(4,4),(6,6), (8,8),(10,10),(12,12),(16,16)]):
         super().__init__()
         self.resolutions = resolutions
         
