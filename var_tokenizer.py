@@ -14,6 +14,22 @@ from model import FSQConverter
 
 #this should match the original paper exactly with the exception of resolutions and quantization method
 #original paper used 10 scales, we use 8
+#since we only have a embed_dim of 6, we use a residual block instead of a simple linear conv
+class ResidualBlock(nn.Module):
+    def __init__(self, channels, expansion_factor=4):
+        super().__init__()
+        hidden_dim = channels * expansion_factor
+        self.conv1 = nn.Conv2d(channels, hidden_dim, kernel_size=3, padding=1).to(torch.bfloat16)
+        self.conv2 = nn.Conv2d(hidden_dim, channels, kernel_size=3, padding=1).to(torch.bfloat16)
+        self.act = nn.GELU()  # or nn.SiLU()
+        
+    def forward(self, x):
+        h = self.conv1(x)
+        h = self.act(h)
+        h = self.conv2(h)
+        return h
+
+        
 class VARTokenizer(nn.Module):
     def __init__(self, resolutions=[(1,1),(2,2),(4,4),(6,6), (8,8),(10,10),(12,12),(16,16)]):
         super().__init__()
@@ -21,7 +37,7 @@ class VARTokenizer(nn.Module):
         
         
         self.residual_convs = nn.ModuleList([
-            nn.Conv2d(6,6, kernel_size=3, padding=1).to(torch.bfloat16) #channels=6 because of discrete cosmos
+            ResidualBlock(6).to(torch.bfloat16) #channels=6 because of discrete cosmos
             for _ in range(len(resolutions))
         ])
         #self.fsqconverter=FSQConverter() #converts latents to indices or indices to latents by the specified nvidia fsq
@@ -72,3 +88,34 @@ class VARTokenizer(nn.Module):
             f = f + z
             
         return f
+
+
+
+
+
+class varmodel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.scaleTokenizer=VARTokenizer()
+        model_name="Cosmos-Tokenizer-DI16x16"
+        self.encoder=ImageTokenizer(checkpoint_enc=f'pretrained_ckpts/{model_name}/encoder.jit').to('cuda')
+        self.decoder=ImageTokenizer(checkpoint_dec=f'pretrained_ckpts/{model_name}/decoder.jit').to('cuda')
+        self.fsq=FSQConverter()
+        
+    def forward(self,x):
+        #x is an image of shape (B,C,256,256) for imagenet
+        indices,encoded=self.encoder.encode(x.to(torch.bfloat16))
+        encodedscaled=self.scaleTokenizer.encode(encoded)
+        latents=self.scaleTokenizer.decode(encodedscaled)
+        ind=self.fsq.latents_to_indices(latents)
+        image=self.decoder.decode(ind)
+        
+        target_latents=encoded
+        return image,latents,target_latents #latents for latent loss, image for reconstruction/perceptual loss
+
+
+
+
+
+
+        

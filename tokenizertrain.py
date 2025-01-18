@@ -70,30 +70,24 @@ dataloader = torch.utils.data.DataLoader(
     
 from model import FSQConverter
 fsq=FSQConverter()
-lpips = LearnedPerceptualImagePatchSimilarity(net_type='squeeze',normalize=True).to('cuda')
+lpips = LearnedPerceptualImagePatchSimilarity(net_type='vgg',normalize=True).to('cuda')
 model_name = "Cosmos-Tokenizer-DI16x16"
 
 decoder=ImageTokenizer(checkpoint_dec=f'pretrained_ckpts/{model_name}/decoder.jit').to('cuda')
 
-def loss_fn(latents,target_latents,image):
-    total_loss=F.mse_loss(latents,target_latents) #simple mse should be fine here
-    with torch.no_grad():
-        indices=fsq.latents_to_indices(latents)
-        target_indices=fsq.latents_to_indices(target_latents)
-        quantized_target=decoder.decode(target_indices).to(torch.float)
-        out=decoder.decode(indices).to(torch.float)
-        out= (out-torch.min(out))/(torch.max(out)-torch.min(out))
-        out=torch.clamp(out,0.0001,0.9999)
+def loss_fn(latents,target_latents,image,target_image):
+    latent_loss=F.mse_loss(latents,target_latents) #simple mse should be fine here
+    out=image
+    mse=0.25*F.mse_loss(out,target_image)
+    out= (out-torch.min(out))/(torch.max(out)-torch.min(out))
+    target_image=torch.clamp(target_image,0.0001,0.9999)
+    lpips_loss_var=lpips(out,target_image)
         
-        quantized_target=(quantized_target-torch.min(quantized_target))/(torch.max(quantized_target)-torch.min(quantized_target))
-        quantized_target=torch.clamp(quantized_target,0.0001,0.9999)
-        image=torch.clamp(image,0.0001,0.9999)
-        lpips_loss_var=lpips(out,image)
-        lpips_loss_original=lpips(quantized_target,image)
-    
-    return total_loss,lpips_loss_var,lpips_loss_original
-num_epochs=1
-model = VARTokenizer()
+    total_loss=0.5*lpips_loss_var + latent_loss+mse
+    return total_loss,lpips_loss_var,latent_loss
+num_epochs=3
+from var_tokenizer import varmodel
+model = varmodel()
 
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
@@ -117,14 +111,11 @@ for epoch in range(num_epochs):
     for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}"):
         images,condition = batch #condition is here only because I reuse the dataloader class in phase 2
         images = images.to(device)
-        with torch.no_grad():
-            indices,encoded=encoder.encode(images.to(torch.bfloat16))
-            #encoded=encoded.to(torch.float) #this depends on whether you want to train the var tokenizer in bfloat16 or float32, cosmos is native bfloat16
         images=images.to('cuda')
         optimizer.zero_grad()
-        output = model.encode(encoded)
-        output=model.decode(output)
-        total_loss,lpips_loss_var,lpips_loss_original = loss_fn(output, encoded,images) #reconstruction goal
+        output,latents,target_latents=model(images)
+        
+        total_loss,lpips_loss_var,latent_loss = loss_fn(latents, target_latents,image=output,target_image=images) 
         
         if not torch.isnan(total_loss):
             total_loss.backward()
@@ -133,9 +124,9 @@ for epoch in range(num_epochs):
             total += total_loss.item()
             
             wandb.log({
-                'total_loss': total_loss.item(),
-                'lpips_original': lpips_loss_original.item(),
+                'latent_loss': latent_loss.item(),
                 'lpips_var': lpips_loss_var.item(),
+                'total_loss': total_loss.item(),
             })
     
     avg_loss = total / len(dataloader)
