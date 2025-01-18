@@ -58,20 +58,6 @@ class cosmos_vae(nn.Module):
 
 
 
-#process
-#vae encode+quantize
-#var tokenize with fsq
-#transformer: vocab 64000
-#var detokenize
-#token to latent
-#vae decode
-class var_tokenizer(nn.Module):
-    def __init__(self):
-        super().__init__()
-        
-    def forward(self):
-        
-        pass
 
 
 
