@@ -74,17 +74,17 @@ lpips = LearnedPerceptualImagePatchSimilarity(net_type='vgg',normalize=True).to(
 model_name = "Cosmos-Tokenizer-DI16x16"
 
 decoder=ImageTokenizer(checkpoint_dec=f'pretrained_ckpts/{model_name}/decoder.jit').to('cuda')
-
+l1=nn.L1Loss()
 def loss_fn(latents,target_latents,image,target_image):
     latent_loss=F.mse_loss(latents,target_latents) #simple mse should be fine here
     out=image
-    mse=0.25*F.mse_loss(out,target_image)
+    #mse=0.25*F.mse_loss(out,target_image)
+    l1loss=l1(out,target_image)
     out= (out-torch.min(out))/(torch.max(out)-torch.min(out))
     target_image=torch.clamp(target_image,0.0001,0.9999)
-    lpips_loss_var=lpips(out,target_image)
-        
-    total_loss=0.5*lpips_loss_var + latent_loss+mse
-    return total_loss,lpips_loss_var,latent_loss
+    lpips_loss_var=lpips(out,target_image)    
+    total_loss= latent_loss+l1loss +0.5*lpips_loss_var #l1 and vgg lpips from cosmos paper
+    return total_loss,lpips_loss_var,latent_loss,l1loss
 num_epochs=3
 from var_tokenizer import varmodel
 model = varmodel()
@@ -115,7 +115,7 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
         output,latents,target_latents=model(images)
         
-        total_loss,lpips_loss_var,latent_loss = loss_fn(latents, target_latents,image=output,target_image=images) 
+        total_loss,lpips_loss_var,latent_loss,l1loss = loss_fn(latents, target_latents,image=output,target_image=images) 
         
         if not torch.isnan(total_loss):
             total_loss.backward()
@@ -127,11 +127,12 @@ for epoch in range(num_epochs):
                 'latent_loss': latent_loss.item(),
                 'lpips_var': lpips_loss_var.item(),
                 'total_loss': total_loss.item(),
+                'l1_loss': l1loss.item(),
             })
     
     avg_loss = total / len(dataloader)
     wandb.log({'avg_loss': avg_loss})
     print(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}")
 
-torch.save(model.state_dict(), 'var_tokenizer.pth')
+torch.save(model.state_dict(), 'var_tokenizer2.pth')
 print("Training completed and model saved.")

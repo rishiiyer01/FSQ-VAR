@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from math import inf
 import math
 import sys
-sys.path.append('cosmos')
+sys.path.append('cosmos')#git cloned repo rename
 from cosmos_tokenizer.image_lib import ImageTokenizer
 from model import cosmos_vae
 from model import FSQConverter
@@ -16,7 +16,7 @@ from model import FSQConverter
 #original paper used 10 scales, we use 8
 #since we only have a embed_dim of 6, we use a residual block instead of a simple linear conv
 class ResidualBlock(nn.Module):
-    def __init__(self, channels, expansion_factor=4):
+    def __init__(self, channels, expansion_factor=8):
         super().__init__()
         hidden_dim = channels * expansion_factor
         self.conv1 = nn.Conv2d(channels, hidden_dim, kernel_size=3, padding=1).to(torch.bfloat16)
@@ -107,10 +107,12 @@ class varmodel(nn.Module):
         indices,encoded=self.encoder.encode(x.to(torch.bfloat16))
         encodedscaled=self.scaleTokenizer.encode(encoded)
         latents=self.scaleTokenizer.decode(encodedscaled)
+        
         ind=self.fsq.latents_to_indices(latents)
         image=self.decoder.decode(ind)
         
         target_latents=encoded
+        
         return image,latents,target_latents #latents for latent loss, image for reconstruction/perceptual loss
 
 

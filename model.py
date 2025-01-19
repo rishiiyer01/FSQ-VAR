@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from math import inf
 import math
 import sys
-sys.path.append('cosmos')
+sys.path.append('cosmos') #git cloned repo rename
 from cosmos_tokenizer.image_lib import ImageTokenizer
 
 class FSQConverter:
